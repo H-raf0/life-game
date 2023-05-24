@@ -1,0 +1,14 @@
+#loading-img {
+  width: 1em;
+}
+
+
+
+.box {
+  display: inline-block;
+  border: 1px black solid;
+  padding: .2em;
+  vertical-align: middle;
+  line-height: normal;
+  /*! height: .1; */
+}

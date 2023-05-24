@@ -1,2 +1,0 @@
-# life-game
-BDD projet
