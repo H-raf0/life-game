@@ -22,7 +22,7 @@ Le **Jeu de la vie** est un automate cellulaire imaginé par le mathématicien *
   - Lecture automatique avec vitesse ajustable  
   - Effacer la grille  
   - Rafraîchir l’affichage  
-- **Zoom et déplacement** : naviguez sur de grandes grilles avec la souris
+- **Zoom et déplacement** : naviguez sur de grandes grilles avec la souris ou les clés "+" et "-"
 
 ## Pile technologique
 
