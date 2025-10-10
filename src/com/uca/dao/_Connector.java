@@ -11,7 +11,7 @@ public class _Connector {
     private static String user = "Hraf";
     private static String passwd = "achraf";
 
-    private static Connection connect;
+    public static Connection connect;
 
     public static Connection getMainConnection(){
         if(connect == null){
@@ -20,7 +20,7 @@ public class _Connector {
         return connect;
     }
 
-    private static Connection getNewConnection() {
+    public static Connection getNewConnection() {
         Connection c;
         try {
             c = DriverManager.getConnection(url, user, passwd);

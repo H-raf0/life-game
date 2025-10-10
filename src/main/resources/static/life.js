@@ -129,6 +129,23 @@ window.onload = function() {
   my_canvas.addEventListener('mousewheel',mouseWheel,false);
   my_canvas.addEventListener('DOMMouseScroll',mouseWheel,false);
 
+  // zoom with keyboard (+ / - or arrows)
+  document.addEventListener('keydown', function(e) {
+    // Determine zoom direction
+    let delta = 0;
+    if (e.key === '+' || e.key === '=' || e.key === 'ArrowUp') delta = 1;
+    if (e.key === '-' || e.key === '_' || e.key === 'ArrowDown') delta = -1;
+
+    if (delta !== 0) {
+      // zoom centered on canvas center
+      const posx = my_canvas.width / 2;
+      const posy = my_canvas.height / 2;
+      canvas.zoom(delta, posx, posy);
+      canvas.draw(plateau);
+    }
+  });
+
+
   function mouseWheel(e) {
     // sens du scroll
     var delta = Math.max(-1, Math.min(1, (e.wheelDelta || -e.detail)));
