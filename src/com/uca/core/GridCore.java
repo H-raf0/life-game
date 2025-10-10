@@ -2,7 +2,6 @@ package com.uca.core;
 
 import com.uca.dao.*;
 import com.uca.entity.*;
-import java.sql.Connection;
 
 import java.net.*;
 import java.io.*;
@@ -171,7 +170,7 @@ public class GridCore {
 
     /**
      * Décode le contenu d'un fichier RLE sous forme de cases à partir d'un URL
-     * @param url - url d'un fichier RLE, ex : https://www.conwaylife.com/patterns/glider.rle
+     * @param url - url d'un fichier RLE, ex : https://copy.sh/life/examples/glider.rle
      */
     public static List<CellEntity> decodeRLEUrl(String url) throws Exception {
         URL u = new URL(url);
