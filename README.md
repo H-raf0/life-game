@@ -221,7 +221,8 @@ Ce projet est réalisé à des fins pédagogiques, pour apprendre :
 
 ## Licence
 
-Projet éducatif — voir les supports de cours pour plus de détails.
+Ce projet est éducatif et libre d’usage pour l’apprentissage et la démonstration.  
+Aucune licence spécifique n’a été définie.
 
 ## Remerciements
 
