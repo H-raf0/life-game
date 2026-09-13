@@ -7,7 +7,8 @@ window.onload = function() {
 
   const fetchUrl = function(path, option) {
     loading_img.style.opacity = 1;
-    return fetch(path + '?session=' + sessionStorage.getItem('session'), option)
+    const separator = path.includes('?') ? '&' : '?';
+    return fetch(path + separator + 'session=' + sessionStorage.getItem('session'), option)
       .then(res => {
         loading_img.style.opacity = 0;
         if (res.status === 200)
@@ -29,13 +30,26 @@ window.onload = function() {
   updateZoomValue();
   const plateau = new Plateau();
   let refreshing = null;
+  let viewportRefreshTimer = null;
   let playing = false;
+
+  const getVisibleBounds = function() {
+    return {
+      minX: Math.floor(canvas.origine[0] / (2 * canvas.rayon)) - 1,
+      maxX: Math.ceil((canvas.origine[0] + canvas.getWidth()) / (2 * canvas.rayon)) + 1,
+      minY: Math.floor(canvas.origine[1] / (2 * canvas.rayon)) - 1,
+      maxY: Math.ceil((canvas.origine[1] + canvas.getHeight()) / (2 * canvas.rayon)) + 1
+    };
+  };
 
   const refreshPlateau = function() {
     if (refreshing)
       return refreshing
 
-    refreshing = fetchUrl('/grid').then(res => {
+    const bounds = getVisibleBounds();
+    const query = '?minX=' + bounds.minX + '&maxX=' + bounds.maxX +
+      '&minY=' + bounds.minY + '&maxY=' + bounds.maxY;
+    refreshing = fetchUrl('/grid' + query).then(res => {
       return res.json().then(json => {
         plateau.data = json;      
         plateau.rebuildIndex();
@@ -45,6 +59,11 @@ window.onload = function() {
     })
     return refreshing
   }
+
+  const scheduleViewportRefresh = function() {
+    clearTimeout(viewportRefreshTimer);
+    viewportRefreshTimer = setTimeout(refreshPlateau, 100);
+  };
 
   // empty input
   const empty_input = document.getElementById('empty-input');
@@ -129,11 +148,14 @@ window.onload = function() {
     import_status.className = '';
     import_status.textContent = 'Import en cours...';
     return fetchUrl('/grid/rle', {method: 'put', body: url})
-      .then(() => refreshPlateau())
-      .then(() => {
-        canvas.focusOn(plateau);
+      .then(() => fetchUrl('/grid/bounds'))
+      .then(res => res.json())
+      .then(bounds => {
+        if (bounds) canvas.focusOnBounds(bounds);
         updateZoomValue();
-        canvas.draw(plateau);
+        return refreshPlateau();
+      })
+      .then(() => {
         import_status.className = 'success';
         import_status.textContent = 'Import terminé (' + plateau.data.length + ' cellules).';
       })
@@ -173,6 +195,7 @@ window.onload = function() {
       canvas.zoom(delta, posx, posy);
       updateZoomValue();
       canvas.draw(plateau);
+      scheduleViewportRefresh();
     }
   });
 
@@ -185,6 +208,7 @@ window.onload = function() {
     canvas.zoom(delta,posx,posy);
     updateZoomValue();
     canvas.draw(plateau);
+    scheduleViewportRefresh();
   }
 
   //deplacement 
@@ -203,6 +227,7 @@ window.onload = function() {
     clearTimeout(decompte);
     canvas.drag = false;
     canvas.draw(plateau);
+    refreshPlateau();
   }, false);
 
   my_canvas.addEventListener('mousemove', function(e){
@@ -226,6 +251,7 @@ window.onload = function() {
     canvas.setWidth(document.getElementById('canvas').offsetWidth);
     canvas.setHeight(document.getElementById('canvas').offsetHeight)
     canvas.draw(plateau);
+    scheduleViewportRefresh();
   },false);
 
 }
@@ -295,20 +321,11 @@ function Canvas(canvas, r){
     this.canvas.height = h;
   }
 
-  this.focusOn = function(p) {
-    if (!p.data.length) return;
-
-    let minX = p.data[0].x;
-    let maxX = p.data[0].x;
-    let minY = p.data[0].y;
-    let maxY = p.data[0].y;
-    for (let i = 1; i < p.data.length; i++) {
-      minX = Math.min(minX, p.data[i].x);
-      maxX = Math.max(maxX, p.data[i].x);
-      minY = Math.min(minY, p.data[i].y);
-      maxY = Math.max(maxY, p.data[i].y);
-    }
-
+  this.focusOnBounds = function(bounds) {
+    const minX = bounds.minX;
+    const maxX = bounds.maxX;
+    const minY = bounds.minY;
+    const maxY = bounds.maxY;
     const padding = 2;
     const width = maxX - minX + 1 + padding * 2;
     const height = maxY - minY + 1 + padding * 2;

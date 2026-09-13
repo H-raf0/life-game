@@ -24,6 +24,16 @@ public class GridCore {
         return grid.getCells();
     }
 
+    public static List<CellEntity> getGrid(int minX, int maxX, int minY, int maxY, Connection connect) {
+        GridEntity grid = new GridEntity();
+        new GridDAO().getLivingCellsInArea(grid, minX, maxX, minY, maxY, connect);
+        return grid.getCells();
+    }
+
+    public static int[] getGridBounds(Connection connect) throws SQLException {
+        return new GridDAO().getGridBounds(connect);
+    }
+
     /**
      * load all alive cells
      * @param connect connection of a specific session
@@ -74,20 +84,39 @@ public class GridCore {
         GridEntity grid = new GridEntity();
         loadCells(grid, connect);
 
-        // stocking those cells in the list "alivecells"
         List<CellEntity> aliveCells = grid.getCells();
-        // cretaing a list where we will store all the changed lists
+        Set<CellEntity> aliveSet = new HashSet<>(aliveCells);
+        Map<CellEntity, Integer> neighborCounts = new HashMap<>();
+
+        for (CellEntity cell : aliveCells) {
+            for (int x = -1; x <= 1; x++) {
+                for (int y = -1; y <= 1; y++) {
+                    if (x == 0 && y == 0) continue;
+                    CellEntity neighbor = new CellEntity(cell.getX() + x, cell.getY() + y);
+                    neighborCounts.put(neighbor, neighborCounts.getOrDefault(neighbor, 0) + 1);
+                }
+            }
+        }
+
         List<CellEntity> newGen = new ArrayList<>();
 
-        // deciding the future state of the cells
-        for(CellEntity cell : aliveCells){
-            int neighborsCount = countAndReviveNeighbors(cell, aliveCells, newGen, false);
-            if (shouldBeAlive(cell, neighborsCount) == 0){
+        for (CellEntity cell : aliveCells) {
+            int neighborsCount = neighborCounts.getOrDefault(cell, 0);
+            if (neighborsCount < 2 || neighborsCount > 3) {
                 cell.setState(0);
                 newGen.add(cell);
             }
         }
-        // updating cells in the data base bae of the informations we have from newGen
+
+        for (Map.Entry<CellEntity, Integer> entry : neighborCounts.entrySet()) {
+            CellEntity cell = entry.getKey();
+            int neighborsCount = entry.getValue();
+            if (neighborsCount == 3 && !aliveSet.contains(cell)) {
+                cell.setState(1);
+                newGen.add(cell);
+            }
+        }
+
         new GridDAO().updateCellsStates(newGen, connect);
     }
 
@@ -220,10 +249,18 @@ public class GridCore {
                 step = 1;
                 continue;
             case 'b':
+            case 'E':
+            case 'F':
+            case 'G':
+            case 'H':
                 x += step;
                 step = 1;
                 continue;
             case 'o':
+            case 'A':
+            case 'B':
+            case 'C':
+            case 'D':
                 for (int j = 0; j < step; j++) {
                     CellEntity c = new CellEntity(x++, y);
                     //System.out.println(c);

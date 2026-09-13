@@ -42,8 +42,29 @@ public class StartServer {
         // retourne l'état de la grille
         get("/grid", (req, res) -> {
                 res.type("application/json");
+            String minX = req.queryParams("minX");
+            String maxX = req.queryParams("maxX");
+            String minY = req.queryParams("minY");
+            String maxY = req.queryParams("maxY");
+            if (minX != null && maxX != null && minY != null && maxY != null) {
+                return new Gson().toJson(GridCore.getGrid(
+                    Integer.parseInt(minX), Integer.parseInt(maxX),
+                    Integer.parseInt(minY), Integer.parseInt(maxY), getConnection(req)));
+            }
                 return new Gson().toJson(GridCore.getGrid(getConnection(req)));
             });
+
+        get("/grid/bounds", (req, res) -> {
+            res.type("application/json");
+            int[] bounds = GridCore.getGridBounds(getConnection(req));
+            if (bounds == null) return "null";
+            Map<String, Integer> result = new HashMap<>();
+            result.put("minX", bounds[0]);
+            result.put("maxX", bounds[1]);
+            result.put("minY", bounds[2]);
+            result.put("maxY", bounds[3]);
+            return new Gson().toJson(result);
+        });
 
         // inverse l'état d'une cellule 
         put("/grid/change", (req, res) -> {

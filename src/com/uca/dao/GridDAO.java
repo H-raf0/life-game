@@ -39,6 +39,34 @@ public class GridDAO {
         }
     }
 
+    public void getLivingCellsInArea(GridEntity grid, int minX, int maxX, int minY, int maxY, Connection connect){
+        try {
+            PreparedStatement statement = connect.prepareStatement(
+                "SELECT x,y FROM grid WHERE x BETWEEN ? AND ? AND y BETWEEN ? AND ?;");
+            statement.setInt(1, minX);
+            statement.setInt(2, maxX);
+            statement.setInt(3, minY);
+            statement.setInt(4, maxY);
+            ResultSet resultSet = statement.executeQuery();
+            while (resultSet.next()) {
+                grid.addCell(new CellEntity(resultSet.getInt("x"), resultSet.getInt("y")));
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public int[] getGridBounds(Connection connect) throws SQLException {
+        PreparedStatement statement = connect.prepareStatement(
+            "SELECT MIN(x), MAX(x), MIN(y), MAX(y) FROM grid;");
+        ResultSet resultSet = statement.executeQuery();
+        if (!resultSet.next() || resultSet.getObject(1) == null) return null;
+        return new int[] {
+            resultSet.getInt(1), resultSet.getInt(2),
+            resultSet.getInt(3), resultSet.getInt(4)
+        };
+    }
+
     /**
      * if a cell is alive (exists) we kill it (remove it) if no we revive it (add it)
      * @param X x of the cell
