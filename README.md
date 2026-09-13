@@ -16,13 +16,14 @@ Le **Jeu de la vie** est un automate cellulaire imaginé par le mathématicien *
 - **Grille interactive** : cliquez sur les cellules pour les activer/désactiver  
 - **Mises à jour en temps réel** : plusieurs utilisateurs peuvent modifier la même grille simultanément  
 - **Gestion des transactions** : enregistrez ou annulez vos changements avant de les valider  
-- **Import de motifs (RLE)** : chargez des motifs à partir d’un lien  
+- **Import de motifs (RLE)** : chargez des motifs à partir d’un lien, y compris les fichiers LifeHistory
 - **Contrôles de simulation** :
   - Passez manuellement à la génération suivante  
-  - Lecture automatique avec vitesse ajustable  
+  - Lecture automatique avec vitesse ajustable, sans délai volontaire à la vitesse maximale
   - Effacer la grille  
   - Rafraîchir l’affichage  
 - **Zoom et déplacement** : naviguez sur de grandes grilles avec la souris ou les clés "+" et "-"
+- **Chargement par fenêtre** : seules les cellules visibles sont envoyées au navigateur
 
 ## Pile technologique
 
@@ -86,7 +87,7 @@ psql -U votre_login -d life
 Modifiez le fichier `src/com/uca/dao/_Connector.java` et mettez à jour les valeurs suivantes :
 
 ```java
-private static String url = "jdbc:postgresql://localhost/life";
+private static String url = "jdbc:postgresql://localhost/LifeGame?reWriteBatchedInserts=true";
 private static String user = "votre_login";
 private static String passwd = "votre_mot_de_passe";
 ```
@@ -149,6 +150,8 @@ projet-life/
 |----------|-----------|-------------|
 | GET | `/` | Page principale |
 | GET | `/grid` | Récupère l’état actuel de la grille |
+| GET | `/grid?minX=...&maxX=...&minY=...&maxY=...` | Récupère uniquement les cellules d’une zone visible |
+| GET | `/grid/bounds` | Récupère les limites du motif actuel |
 | PUT | `/grid/change` | Active/désactive une cellule |
 | POST | `/grid/save` | Valide les modifications |
 | POST | `/grid/cancel` | Annule les modifications |
@@ -164,7 +167,7 @@ projet-life/
 - **Rafraîchir** : recharge la grille  
 - **Vider** : supprime toutes les cellules  
 - **Suivant** : calcule la génération suivante  
-- **Lecture/Pause** : avance automatiquement selon la vitesse choisie
+- **Lecture/Pause** : avance automatiquement selon la vitesse choisie. À la vitesse maximale, les générations s’enchaînent dès que la précédente est terminée.
 
 ### Gestion des transactions
 
@@ -173,12 +176,16 @@ Les modifications sont isolées jusqu’à ce que vous :
 - **Enregistriez** : pour valider vos changements dans la base  
 - **Annuliez** : pour les annuler
 
+Pendant **Lecture**, les générations sont calculées en mémoire pour éviter une écriture PostgreSQL à chaque image. Cliquez sur **sauvegarder** pour persister la génération courante. Cliquez sur **annuler** pour abandonner la simulation en cours.
+
 ### Import de motifs
 
 1. Rendez-vous sur [copy.sh/life/examples/](https://copy.sh/life/examples/)  
 2. Copiez le lien du fichier RLE dans la section “Pattern files”  
 3. Collez ce lien dans le champ RLE de l’application  
 4. Cliquez sur **Importer**
+
+Les RLE standard utilisent `o` pour une cellule vivante et `b` pour une cellule morte. Les fichiers `LifeHistory` utilisent plusieurs états (`A-D` pour les cellules vivantes et `E-H` pour les cellules mortes) ; leurs états d’historique sont simplifiés en cellules vivantes ou mortes lors de l’import.
 
 Exemple d’URL :  
 `https://copy.sh/life/examples/glider.rle`
@@ -191,13 +198,12 @@ L’application utilise une seule table :
 CREATE TABLE grid (
     x INT NOT NULL,
     y INT NOT NULL,
-    state INT NOT NULL,
     PRIMARY KEY (x, y)
 );
 ```
 
 - **x, y** : coordonnées de la cellule  
-- **state** : 0 (morte) ou 1 (vivante)
+- Une ligne présente représente une cellule vivante ; une cellule morte n’est pas stockée.
 
 ## Commandes PostgreSQL utiles
 
