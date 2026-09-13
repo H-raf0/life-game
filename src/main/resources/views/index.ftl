@@ -28,6 +28,7 @@
                 <input id="import-input" type="button" value="importer" />
                 <span id="import-status" role="status" aria-live="polite"></span>
             </div>
+            <span id="zoom-value" aria-live="polite"></span>
         </div>
 
         <div id="canvas">

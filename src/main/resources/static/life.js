@@ -20,8 +20,13 @@ window.onload = function() {
 
   const my_canvas = document.getElementById('mon_canvas');
   const canvas = new Canvas(my_canvas,8);
+  const zoom_value = document.getElementById('zoom-value');
+  const updateZoomValue = function() {
+    zoom_value.textContent = 'Zoom: ' + Math.round(canvas.rayon / 8 * 100) + '%';
+  }
   canvas.setWidth(window.innerWidth);
   canvas.setHeight(window.innerHeight-50);
+  updateZoomValue();
   const plateau = new Plateau();
   let refreshing = null;
   let playing = false;
@@ -33,6 +38,7 @@ window.onload = function() {
     refreshing = fetchUrl('/grid').then(res => {
       return res.json().then(json => {
         plateau.data = json;      
+        plateau.rebuildIndex();
         canvas.draw(plateau);
         refreshing = null;
       })
@@ -126,6 +132,7 @@ window.onload = function() {
       .then(() => refreshPlateau())
       .then(() => {
         canvas.focusOn(plateau);
+        updateZoomValue();
         canvas.draw(plateau);
         import_status.className = 'success';
         import_status.textContent = 'Import terminé (' + plateau.data.length + ' cellules).';
@@ -164,6 +171,7 @@ window.onload = function() {
       const posx = my_canvas.width / 2;
       const posy = my_canvas.height / 2;
       canvas.zoom(delta, posx, posy);
+      updateZoomValue();
       canvas.draw(plateau);
     }
   });
@@ -175,6 +183,7 @@ window.onload = function() {
     var posx = e.clientX-my_canvas.getBoundingClientRect().left;
     var posy = e.clientY-my_canvas.getBoundingClientRect().top;
     canvas.zoom(delta,posx,posy);
+    updateZoomValue();
     canvas.draw(plateau);
   }
 
@@ -226,9 +235,28 @@ function Plateau() {
   this.data = [];
   this.nombre = 0;
   this.generation = 0;
+  this.bucketSize = 64;
+  this.buckets = new Map();
+
+  this.rebuildIndex = function() {
+    this.buckets.clear();
+    for (let i = 0; i < this.data.length; i++) {
+      const cell = this.data[i];
+      const bucketX = Math.floor(cell.x / this.bucketSize);
+      const bucketY = Math.floor(cell.y / this.bucketSize);
+      const key = bucketX + ',' + bucketY;
+      let bucket = this.buckets.get(key);
+      if (!bucket) {
+        bucket = [];
+        this.buckets.set(key, bucket);
+      }
+      bucket.push(cell);
+    }
+  }
 
   this.empty = function() {
     this.data = [];
+    this.buckets.clear();
     this.nombre = 0;
     this.generation = 0;
   }
@@ -242,18 +270,16 @@ function Canvas(canvas, r){
   this.wasdrag = false;
   this.mode = false; // signifie que le jeu n'est pas en marche
   this.origine = [-1,-1]; // position du cote haut gauche de l'affichage variable suivant le rayon sur le plan infini
-  this.minRayon = 0.5
+  this.minRayon = 0.01
+  this.zoomStep = 1.08
   
   this.zoom = function(d,x,y) { 
     //zoom ou dezoom en laissant x,y à la meme position
-    if((this.rayon<10 && this.rayon > this.minRayon) ||
-       (this.rayon >= 10 && d<0) ||
-       (this.rayon<= this.minRayon && d>0)){
-      this.origine[0] = ((this.rayon + d/2)/this.rayon)*(this.origine[0] + x) - x;
-      this.origine[1] = ((this.rayon + d/2 ) /this.rayon)*(this.origine[1] + y) - y;
-      if(d > 0) { this.rayon += 0.5 }
-      else {this.rayon -= 0.5 }
-    }
+    const nextRayon = Math.max(this.minRayon, d > 0 ? this.rayon * this.zoomStep : this.rayon / this.zoomStep);
+    if (nextRayon === this.rayon) return;
+    this.origine[0] = (nextRayon / this.rayon) * (this.origine[0] + x) - x;
+    this.origine[1] = (nextRayon / this.rayon) * (this.origine[1] + y) - y;
+    this.rayon = nextRayon;
   }
 
   this.getWidth = function() {
@@ -297,20 +323,30 @@ function Canvas(canvas, r){
     // on nettoie le canevas
     this.context.clearRect(0,0,this.getWidth(),this.getHeight()); 
 
-    for(i=0;i < p.data.length; i++) {
+    const minX = Math.floor(this.origine[0] / (2 * this.rayon));
+    const maxX = Math.ceil((this.origine[0] + this.getWidth()) / (2 * this.rayon));
+    const minY = Math.floor(this.origine[1] / (2 * this.rayon));
+    const maxY = Math.ceil((this.origine[1] + this.getHeight()) / (2 * this.rayon));
+    const minBucketX = Math.floor(minX / p.bucketSize);
+    const maxBucketX = Math.floor(maxX / p.bucketSize);
+    const minBucketY = Math.floor(minY / p.bucketSize);
+    const maxBucketY = Math.floor(maxY / p.bucketSize);
 
-      if(2*this.rayon*(p.data[i].x+1) > this.origine[0]  && 
-         2*this.rayon*p.data[i].x < this.origine[0] + this.getWidth() &&
-         2*this.rayon*(p.data[i].y+1) > this.origine[1] && 
-         2*this.rayon*p.data[i].y < this.origine[1] + this.getHeight() ) {
-
-	this.context.beginPath();
-	this.context.arc(this.rayon*(2*p.data[i].x+1) - this.origine[0],
-			 this.rayon*(2*p.data[i].y+1) - this.origine[1],
-			 this.rayon,0,2*Math.PI);
-	this.context.fillStyle = "#E1170D";
-	this.context.fill();
-	this.context.closePath();
+    this.context.fillStyle = "#E1170D";
+    for (let bucketX = minBucketX; bucketX <= maxBucketX; bucketX++) {
+      for (let bucketY = minBucketY; bucketY <= maxBucketY; bucketY++) {
+        const bucket = p.buckets.get(bucketX + ',' + bucketY);
+        if (!bucket) continue;
+        for (let i = 0; i < bucket.length; i++) {
+          const cell = bucket[i];
+          if (cell.x < minX || cell.x > maxX || cell.y < minY || cell.y > maxY) continue;
+          this.context.beginPath();
+          this.context.arc(this.rayon*(2*cell.x+1) - this.origine[0],
+                           this.rayon*(2*cell.y+1) - this.origine[1],
+                           this.rayon,0,2*Math.PI);
+          this.context.fill();
+          this.context.closePath();
+        }
       }
     }
     

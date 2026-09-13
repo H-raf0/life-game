@@ -24,3 +24,9 @@
 #import-status.success {
   color: #176b2c;
 }
+
+#zoom-value {
+  display: inline-block;
+  margin-left: .5em;
+  min-width: 5em;
+}
