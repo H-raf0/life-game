@@ -102,24 +102,15 @@ public class GridDAO {
      * @param cells list of cells that should be alive
      * @param connect connection of a specific session
     */
-    public void loadCellsRLE(List<CellEntity> cells, Connection connect){
-        try {
-            PreparedStatement statement = connect.prepareStatement("INSERT INTO grid (x, y) VALUES (?, ?)");
-            for (CellEntity cell : cells) {
-                statement.setInt(1, cell.getX());
-                statement.setInt(2, cell.getY());
-                statement.addBatch();
-            }
-            // Exécuter les inserts par lots
-            statement.executeBatch();
-        } catch (SQLException e) {
-            e.printStackTrace();
-            try {
-                connect.rollback(); // Rollback the transaction if an exception occurs
-            } catch (SQLException ex) {
-                ex.printStackTrace();
-            }
+    public void loadCellsRLE(List<CellEntity> cells, Connection connect) throws SQLException {
+        PreparedStatement statement = connect.prepareStatement("INSERT INTO grid (x, y) VALUES (?, ?)");
+        for (CellEntity cell : cells) {
+            statement.setInt(1, cell.getX());
+            statement.setInt(2, cell.getY());
+            statement.addBatch();
         }
+        // Exécuter les inserts par lots
+        statement.executeBatch();
     }
 
     /**

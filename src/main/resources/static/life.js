@@ -12,8 +12,9 @@ window.onload = function() {
         loading_img.style.opacity = 0;
         if (res.status === 200)
           return res;
-        else
-          return Promise.reject();
+        return res.text().then(message => {
+          throw new Error(message || ('Requête échouée (' + res.status + ').'));
+        });
       })
   }
 
@@ -30,7 +31,7 @@ window.onload = function() {
       return refreshing
 
     refreshing = fetchUrl('/grid').then(res => {
-      res.json().then(json => {
+      return res.json().then(json => {
         plateau.data = json;      
         canvas.draw(plateau);
         refreshing = null;
@@ -116,13 +117,35 @@ window.onload = function() {
   // import
   const rle_input = document.getElementById('rle-input');
   const import_input = document.getElementById('import-input');
+  const import_status = document.getElementById('import-status');
   const importRLE = function(url) {
+    import_input.disabled = true;
+    import_status.className = '';
+    import_status.textContent = 'Import en cours...';
     return fetchUrl('/grid/rle', {method: 'put', body: url})
       .then(() => refreshPlateau())
+      .then(() => {
+        canvas.focusOn(plateau);
+        canvas.draw(plateau);
+        import_status.className = 'success';
+        import_status.textContent = 'Import terminé (' + plateau.data.length + ' cellules).';
+      })
+      .catch(error => {
+        import_status.className = 'error';
+        import_status.textContent = error.message || "Echec de l'import.";
+      })
+      .finally(() => {
+        import_input.disabled = false;
+      });
   }
 
   import_input.addEventListener('click', () => {
-    importRLE(rle_input.value);
+    if (!rle_input.value.trim()) {
+      import_status.className = 'error';
+      import_status.textContent = 'Entrez une URL RLE.';
+      return;
+    }
+    importRLE(rle_input.value.trim());
   }, false);
   
   // zoom et dezoom
@@ -244,6 +267,30 @@ function Canvas(canvas, r){
   }
   this.setHeight = function(h) {
     this.canvas.height = h;
+  }
+
+  this.focusOn = function(p) {
+    if (!p.data.length) return;
+
+    let minX = p.data[0].x;
+    let maxX = p.data[0].x;
+    let minY = p.data[0].y;
+    let maxY = p.data[0].y;
+    for (let i = 1; i < p.data.length; i++) {
+      minX = Math.min(minX, p.data[i].x);
+      maxX = Math.max(maxX, p.data[i].x);
+      minY = Math.min(minY, p.data[i].y);
+      maxY = Math.max(maxY, p.data[i].y);
+    }
+
+    const padding = 2;
+    const width = maxX - minX + 1 + padding * 2;
+    const height = maxY - minY + 1 + padding * 2;
+    const fitRayon = Math.min(this.getWidth() / (2 * width), this.getHeight() / (2 * height));
+    if (fitRayon < this.rayon) this.rayon = Math.max(this.minRayon, fitRayon);
+
+    this.origine[0] = ((minX + maxX + 1) * this.rayon) - this.getWidth() / 2;
+    this.origine[1] = ((minY + maxY + 1) * this.rayon) - this.getHeight() / 2;
   }
 
   this.draw = function(p) {

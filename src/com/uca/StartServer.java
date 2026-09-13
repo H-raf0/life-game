@@ -74,12 +74,16 @@ public class StartServer {
         // charge un fichier rle depuis un URL
         put("/grid/rle", (req, res) -> {
                 Connection c = getConnection(req);
-                GridCore.emptyGrid(c);
-
+            try {
                 String RLEUrl = req.body();
+                GridCore.emptyGrid(c);
                 GridCore.loadFromRLE(RLEUrl, c);
-
                 return "";
+            } catch (Exception e) {
+                c.rollback();
+                res.status(400);
+                return e.getMessage() == null ? "Import RLE impossible" : e.getMessage();
+            }
             });
 
         // vide la grille

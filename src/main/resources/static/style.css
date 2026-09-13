@@ -12,3 +12,15 @@
   line-height: normal;
   /*! height: .1; */
 }
+
+#import-status {
+  margin-left: .4em;
+}
+
+#import-status.error {
+  color: #b00020;
+}
+
+#import-status.success {
+  color: #176b2c;
+}

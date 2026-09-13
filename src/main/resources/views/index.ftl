@@ -26,6 +26,7 @@
                 <label for="rle-input">RLE: </label>
                 <input id="rle-input" type="url" placeholder="url" />
                 <input id="import-input" type="button" value="importer" />
+                <span id="import-status" role="status" aria-live="polite"></span>
             </div>
         </div>
 

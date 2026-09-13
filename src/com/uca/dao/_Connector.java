@@ -8,8 +8,8 @@ import java.util.*;
 public class _Connector {
 
     private static String url = "jdbc:postgresql://localhost/LifeGame";
-    private static String user = "yourLogin";
-    private static String passwd = "yourPassword";
+    private static String user = "lifeuser";
+    private static String passwd = "lifepassword";
 
     public static Connection connect;
 

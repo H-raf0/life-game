@@ -55,17 +55,14 @@ public class GridCore {
      * @param connect connection of a specific session
      * @param RLEUrl RLEUrl that contains the shape we want
     */
-    public static void loadFromRLE(String RLEUrl, Connection connect) {
-
-        try {
-            //decoding RLEUrl to cells list
-            List<CellEntity> decodedCells = decodeRLEUrl(RLEUrl);
-            //applying those changes to the data baseS
-            new GridDAO().loadCellsRLE(decodedCells, connect);
-        } catch (Exception e) {
-
-            e.printStackTrace();
+    public static void loadFromRLE(String RLEUrl, Connection connect) throws Exception {
+        //decoding RLEUrl to cells list
+        List<CellEntity> decodedCells = decodeRLEUrl(RLEUrl);
+        if (decodedCells.isEmpty()) {
+            throw new IllegalArgumentException("Le fichier RLE ne contient aucune cellule.");
         }
+        //applying those changes to the data base
+        new GridDAO().loadCellsRLE(decodedCells, connect);
     }
     
     /**
