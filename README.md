@@ -11,6 +11,10 @@ Le **Jeu de la vie** est un automate cellulaire imaginé par le mathématicien *
 - [Vidéo Science étonnante](https://www.youtube.com/watch?v=S-W0NX97DB0)
 - [Le Jeu de la vie qui se simule lui-même](https://www.youtube.com/watch?v=xP5-iIeKXE8)
 
+## DEMO
+
+https://github.com/user-attachments/assets/02b51196-7712-404b-9e08-a60ad343a547
+
 ## Fonctionnalités
 
 - **Grille interactive** : cliquez sur les cellules pour les activer/désactiver  
