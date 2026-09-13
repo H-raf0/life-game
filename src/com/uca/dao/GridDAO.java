@@ -141,32 +141,56 @@ public class GridDAO {
         statement.executeBatch();
     }
 
+    public void replaceGrid(List<CellEntity> cells, Connection connect) throws SQLException {
+        Statement clear = connect.createStatement();
+        clear.executeUpdate("DELETE FROM grid");
+        clear.close();
+        PreparedStatement insert = connect.prepareStatement("INSERT INTO grid (x, y) VALUES (?, ?)");
+        for (CellEntity cell : cells) {
+            insert.setInt(1, cell.getX());
+            insert.setInt(2, cell.getY());
+            insert.addBatch();
+        }
+        insert.executeBatch();
+        insert.close();
+    }
+
     /**
      * insert revived cells or deleted the dead ones
      * @param newGen list of cells to be changed
      * @param connect connection of a specific session
     */
     public void updateCellsStates(List<CellEntity> newGen, Connection connect){
-
+        if (newGen.isEmpty()) return;
         try {
-            String query1 = "INSERT INTO grid (x, y) VALUES (?, ?)";
-            String query2 = "DELETE FROM grid WHERE x = ? AND y = ?;";
-            PreparedStatement statement1 = connect.prepareStatement(query1);
-            PreparedStatement statement2 = connect.prepareStatement(query2);
+            Statement setup = connect.createStatement();
+            setup.executeUpdate(
+                "CREATE TEMP TABLE IF NOT EXISTS grid_changes (" +
+                "x INT NOT NULL, y INT NOT NULL, state INT NOT NULL, " +
+                "PRIMARY KEY (x, y)) ON COMMIT DELETE ROWS");
+            setup.executeUpdate("DELETE FROM grid_changes");
+            setup.close();
+
+            PreparedStatement changes = connect.prepareStatement(
+                "INSERT INTO grid_changes (x, y, state) VALUES (?, ?, ?)");
             for (CellEntity cell : newGen) {
-                if(cell.getState()==1){ // if the cell should be revived 
-                    statement1.setInt(1, cell.getX());
-                    statement1.setInt(2, cell.getY());
-                    statement1.addBatch();
-                }else{                 // if the cell should be killed
-                    statement2.setInt(1, cell.getX());
-                    statement2.setInt(2, cell.getY());
-                    statement2.addBatch();
-                }
+                changes.setInt(1, cell.getX());
+                changes.setInt(2, cell.getY());
+                changes.setInt(3, cell.getState());
+                changes.addBatch();
             }
-            // Exécuter les inserts par lots
-            statement1.executeBatch();
-            statement2.executeBatch();
+            changes.executeBatch();
+            changes.close();
+
+            Statement apply = connect.createStatement();
+            apply.executeUpdate(
+                "DELETE FROM grid g USING grid_changes c " +
+                "WHERE c.state = 0 AND g.x = c.x AND g.y = c.y");
+            apply.executeUpdate(
+                "INSERT INTO grid (x, y) " +
+                "SELECT x, y FROM grid_changes WHERE state = 1 " +
+                "ON CONFLICT (x, y) DO NOTHING");
+            apply.close();
         } catch (SQLException e) {
             e.printStackTrace();
             try {
@@ -175,5 +199,30 @@ public class GridDAO {
                 ex.printStackTrace();
             }
         }
+    }
+
+    public void advanceGeneration(Connection connect) throws SQLException {
+        Statement statement = connect.createStatement();
+        statement.executeUpdate(
+            "CREATE TEMP TABLE IF NOT EXISTS grid_next_generation (" +
+            "x INT NOT NULL, y INT NOT NULL, PRIMARY KEY (x, y)" +
+            ") ON COMMIT DELETE ROWS");
+        statement.executeUpdate("DELETE FROM grid_next_generation");
+        statement.executeUpdate(
+            "WITH neighbor_counts AS (" +
+            " SELECT g.x + offsets.dx AS x, g.y + offsets.dy AS y, COUNT(*) AS neighbors" +
+            " FROM grid g CROSS JOIN (VALUES" +
+            " (-1,-1),(-1,0),(-1,1),(0,-1),(0,1),(1,-1),(1,0),(1,1)" +
+            " ) AS offsets(dx, dy)" +
+            " GROUP BY g.x + offsets.dx, g.y + offsets.dy" +
+            ") INSERT INTO grid_next_generation (x, y)" +
+            " SELECT x, y FROM neighbor_counts WHERE neighbors = 3" +
+            " UNION" +
+            " SELECT n.x, n.y FROM neighbor_counts n" +
+            " JOIN grid g ON g.x = n.x AND g.y = n.y" +
+            " WHERE n.neighbors = 2");
+        statement.executeUpdate("DELETE FROM grid");
+        statement.executeUpdate("INSERT INTO grid (x, y) SELECT x, y FROM grid_next_generation");
+        statement.close();
     }
 }

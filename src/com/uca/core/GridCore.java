@@ -79,45 +79,150 @@ public class GridCore {
      * jump to the next generation
      * @param connect connection of a specific session
     */
-    public static void goNext(Connection connect){
-        // loading the current alive cells
+    public static void goNext(Connection connect) {
+        long started = System.nanoTime();
         GridEntity grid = new GridEntity();
         loadCells(grid, connect);
-
         List<CellEntity> aliveCells = grid.getCells();
-        Set<CellEntity> aliveSet = new HashSet<>(aliveCells);
-        Map<CellEntity, Integer> neighborCounts = new HashMap<>();
+        long loaded = System.nanoTime();
+        if (shouldUseDenseGeneration(aliveCells)) {
+            goNextDense(aliveCells, connect);
+            long finished = System.nanoTime();
+            System.out.println("[perf] generation: " + aliveCells.size() + " cells, load "
+                + ((loaded - started) / 1_000_000) + " ms, dense compute+update "
+                + ((finished - loaded) / 1_000_000) + " ms");
+            return;
+        }
 
+        Set<Long> aliveSet = new HashSet<>(aliveCells.size() * 2);
+        Map<Long, Integer> neighborCounts = new HashMap<>(aliveCells.size() * 4);
+        for (CellEntity cell : aliveCells) {
+            aliveSet.add(coordinateKey(cell.getX(), cell.getY()));
+        }
         for (CellEntity cell : aliveCells) {
             for (int x = -1; x <= 1; x++) {
                 for (int y = -1; y <= 1; y++) {
                     if (x == 0 && y == 0) continue;
-                    CellEntity neighbor = new CellEntity(cell.getX() + x, cell.getY() + y);
+                    long neighbor = coordinateKey(cell.getX() + x, cell.getY() + y);
                     neighborCounts.put(neighbor, neighborCounts.getOrDefault(neighbor, 0) + 1);
                 }
             }
         }
 
-        List<CellEntity> newGen = new ArrayList<>();
-
+        List<CellEntity> changes = new ArrayList<>();
         for (CellEntity cell : aliveCells) {
-            int neighborsCount = neighborCounts.getOrDefault(cell, 0);
-            if (neighborsCount < 2 || neighborsCount > 3) {
+            long key = coordinateKey(cell.getX(), cell.getY());
+            int neighbors = neighborCounts.getOrDefault(key, 0);
+            if (neighbors < 2 || neighbors > 3) {
                 cell.setState(0);
-                newGen.add(cell);
+                changes.add(cell);
             }
         }
-
-        for (Map.Entry<CellEntity, Integer> entry : neighborCounts.entrySet()) {
-            CellEntity cell = entry.getKey();
-            int neighborsCount = entry.getValue();
-            if (neighborsCount == 3 && !aliveSet.contains(cell)) {
+        for (Map.Entry<Long, Integer> entry : neighborCounts.entrySet()) {
+            if (entry.getValue() == 3 && !aliveSet.contains(entry.getKey())) {
+                CellEntity cell = new CellEntity((int) (entry.getKey() >> 32), (int) (long) entry.getKey());
                 cell.setState(1);
-                newGen.add(cell);
+                changes.add(cell);
             }
         }
+        long computed = System.nanoTime();
+        new GridDAO().updateCellsStates(changes, connect);
+        long finished = System.nanoTime();
+        System.out.println("[perf] generation: " + aliveCells.size() + " cells, load "
+            + ((loaded - started) / 1_000_000) + " ms, sparse compute "
+            + ((computed - loaded) / 1_000_000) + " ms, update "
+            + ((finished - computed) / 1_000_000) + " ms");
+    }
 
-        new GridDAO().updateCellsStates(newGen, connect);
+    private static boolean shouldUseDenseGeneration(List<CellEntity> aliveCells) {
+        if (aliveCells.isEmpty()) return false;
+        int minX = aliveCells.get(0).getX();
+        int maxX = minX;
+        int minY = aliveCells.get(0).getY();
+        int maxY = minY;
+        for (CellEntity cell : aliveCells) {
+            minX = Math.min(minX, cell.getX());
+            maxX = Math.max(maxX, cell.getX());
+            minY = Math.min(minY, cell.getY());
+            maxY = Math.max(maxY, cell.getY());
+        }
+        long area = (long) (maxX - minX + 3) * (maxY - minY + 3);
+        return area <= 10_000_000L && area <= aliveCells.size() * 8L;
+    }
+
+    private static void goNextDense(List<CellEntity> aliveCells, Connection connect) {
+        int minX = aliveCells.get(0).getX();
+        int maxX = minX;
+        int minY = aliveCells.get(0).getY();
+        int maxY = minY;
+        for (CellEntity cell : aliveCells) {
+            minX = Math.min(minX, cell.getX());
+            maxX = Math.max(maxX, cell.getX());
+            minY = Math.min(minY, cell.getY());
+            maxY = Math.max(maxY, cell.getY());
+        }
+
+        int width = maxX - minX + 3;
+        int height = maxY - minY + 3;
+        boolean[] alive = new boolean[width * height];
+        for (CellEntity cell : aliveCells) {
+            int x = cell.getX() - minX + 1;
+            int y = cell.getY() - minY + 1;
+            alive[y * width + x] = true;
+        }
+
+        List<CellEntity> changes = new ArrayList<>();
+        for (int y = 1; y < height - 1; y++) {
+            for (int x = 1; x < width - 1; x++) {
+                int index = y * width + x;
+                int neighbors = 0;
+                neighbors += alive[index - width - 1] ? 1 : 0;
+                neighbors += alive[index - width] ? 1 : 0;
+                neighbors += alive[index - width + 1] ? 1 : 0;
+                neighbors += alive[index - 1] ? 1 : 0;
+                neighbors += alive[index + 1] ? 1 : 0;
+                neighbors += alive[index + width - 1] ? 1 : 0;
+                neighbors += alive[index + width] ? 1 : 0;
+                neighbors += alive[index + width + 1] ? 1 : 0;
+
+                boolean nextAlive = neighbors == 3 || (alive[index] && neighbors == 2);
+                if (nextAlive != alive[index]) {
+                    CellEntity cell = new CellEntity(x + minX - 1, y + minY - 1);
+                    cell.setState(nextAlive ? 1 : 0);
+                    changes.add(cell);
+                }
+            }
+        }
+        new GridDAO().updateCellsStates(changes, connect);
+    }
+
+    public static List<CellEntity> nextGeneration(List<CellEntity> aliveCells) {
+        Set<Long> aliveSet = new HashSet<>(aliveCells.size() * 2);
+        Map<Long, Integer> neighborCounts = new HashMap<>(aliveCells.size() * 4);
+        for (CellEntity cell : aliveCells) {
+            aliveSet.add(coordinateKey(cell.getX(), cell.getY()));
+        }
+        for (CellEntity cell : aliveCells) {
+            for (int x = -1; x <= 1; x++) {
+                for (int y = -1; y <= 1; y++) {
+                    if (x == 0 && y == 0) continue;
+                    long neighbor = coordinateKey(cell.getX() + x, cell.getY() + y);
+                    neighborCounts.put(neighbor, neighborCounts.getOrDefault(neighbor, 0) + 1);
+                }
+            }
+        }
+        List<CellEntity> next = new ArrayList<>();
+        for (Map.Entry<Long, Integer> entry : neighborCounts.entrySet()) {
+            if (entry.getValue() == 3 ||
+                (entry.getValue() == 2 && aliveSet.contains(entry.getKey()))) {
+                next.add(new CellEntity((int) (entry.getKey() >> 32), (int) (long) entry.getKey()));
+            }
+        }
+        return next;
+    }
+
+    private static long coordinateKey(int x, int y) {
+        return ((long) x << 32) ^ (y & 0xffffffffL);
     }
 
 

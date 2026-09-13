@@ -7,7 +7,7 @@ import java.util.*;
 
 public class _Connector {
 
-    private static String url = "jdbc:postgresql://localhost/LifeGame";
+    private static String url = "jdbc:postgresql://localhost/LifeGame?reWriteBatchedInserts=true";
     private static String user = "lifeuser";
     private static String passwd = "lifepassword";
 

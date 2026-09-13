@@ -46,6 +46,7 @@ window.onload = function() {
     if (refreshing)
       return refreshing
 
+    const refreshStarted = performance.now();
     const bounds = getVisibleBounds();
     const query = '?minX=' + bounds.minX + '&maxX=' + bounds.maxX +
       '&minY=' + bounds.minY + '&maxY=' + bounds.maxY;
@@ -53,10 +54,14 @@ window.onload = function() {
       return res.json().then(json => {
         plateau.data = json;      
         plateau.rebuildIndex();
+        console.info('[perf] grid refresh:', Math.round(performance.now() - refreshStarted) + ' ms,', plateau.data.length, 'visible cells');
+        const drawStarted = performance.now();
         canvas.draw(plateau);
-        refreshing = null;
+        console.info('[perf] canvas draw:', Math.round(performance.now() - drawStarted) + ' ms');
       })
-    })
+    }).finally(() => {
+      refreshing = null;
+    });
     return refreshing
   }
 
@@ -80,8 +85,12 @@ window.onload = function() {
   // next input
   const next_input = document.getElementById('next-input');
   const nextPlateau = function() {
+    const generationStarted = performance.now();
     return fetchUrl('/grid/next', {method: 'post'})
       .then(() => refreshPlateau())
+      .then(() => {
+        console.info('[perf] generation round trip:', Math.round(performance.now() - generationStarted) + ' ms');
+      })
   }
   
   next_input.addEventListener('click', nextPlateau, false);
@@ -94,9 +103,19 @@ window.onload = function() {
       const start = new Date();
       nextPlateau().then(() => {
         const end = new Date();
-        const waiting_time = Math.max((10000 / parseInt(speed_input.value))  - (end - start), 0);
+        const speed = parseInt(speed_input.value);
+        const maximumSpeed = parseInt(speed_input.max);
+        const waiting_time = speed >= maximumSpeed
+          ? 0
+          : Math.max((10000 / speed) - (end - start), 0);
         setTimeout(start_play, waiting_time);
-      })
+      }).catch(error => {
+        playing = false;
+        next_input.disabled = false;
+        play_input.value = 'lecture';
+        import_status.className = 'error';
+        import_status.textContent = error.message || "La simulation a échoué.";
+      });
     }
   }
   

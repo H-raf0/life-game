@@ -2,6 +2,7 @@ package com.uca;
 
 import com.uca.dao._Initializer;
 import com.uca.dao._Connector;
+import com.uca.dao.GridDAO;
 import com.uca.gui.*;
 
 import com.uca.core.GridCore;
@@ -20,6 +21,8 @@ import java.util.Map;
 
 
 public class StartServer {
+
+    private static final HashMap<Integer, List<CellEntity>> simulationGrids = new HashMap<>();
 
 
     public static void main(String[] args) {
@@ -42,10 +45,23 @@ public class StartServer {
         // retourne l'état de la grille
         get("/grid", (req, res) -> {
                 res.type("application/json");
+            List<CellEntity> simulationGrid = simulationGrids.get(getSession(req));
             String minX = req.queryParams("minX");
             String maxX = req.queryParams("maxX");
             String minY = req.queryParams("minY");
             String maxY = req.queryParams("maxY");
+            if (simulationGrid != null) {
+                List<CellEntity> visible = new ArrayList<>();
+                for (CellEntity cell : simulationGrid) {
+                    if (minX == null || (cell.getX() >= Integer.parseInt(minX) &&
+                        cell.getX() <= Integer.parseInt(maxX) &&
+                        cell.getY() >= Integer.parseInt(minY) &&
+                        cell.getY() <= Integer.parseInt(maxY))) {
+                        visible.add(cell);
+                    }
+                }
+                return new Gson().toJson(visible);
+            }
             if (minX != null && maxX != null && minY != null && maxY != null) {
                 return new Gson().toJson(GridCore.getGrid(
                     Integer.parseInt(minX), Integer.parseInt(maxX),
@@ -68,6 +84,7 @@ public class StartServer {
 
         // inverse l'état d'une cellule 
         put("/grid/change", (req, res) -> {
+            simulationGrids.remove(getSession(req));
                 Gson gson = new Gson();
                 CellEntity selectedCell = (CellEntity) gson.fromJson(req.body(), CellEntity.class);
 
@@ -80,6 +97,10 @@ public class StartServer {
         post("/grid/save", (req, res) -> {
 
                 Connection c = getConnection(req);
+            List<CellEntity> simulationGrid = simulationGrids.remove(getSession(req));
+            if (simulationGrid != null) {
+                new GridDAO().replaceGrid(simulationGrid, c);
+            }
                 c.commit();
                 
                 return "";
@@ -88,6 +109,7 @@ public class StartServer {
         // annule les modifications de la grille 
         post("/grid/cancel", (req, res) -> {
                 Connection c = getConnection(req);
+            simulationGrids.remove(getSession(req));
                 c.rollback();
                 return "";
             });
@@ -96,6 +118,7 @@ public class StartServer {
         put("/grid/rle", (req, res) -> {
                 Connection c = getConnection(req);
             try {
+                simulationGrids.remove(getSession(req));
                 String RLEUrl = req.body();
                 GridCore.emptyGrid(c);
                 GridCore.loadFromRLE(RLEUrl, c);
@@ -109,13 +132,23 @@ public class StartServer {
 
         // vide la grille
         post("/grid/empty", (req, res) -> {
+            simulationGrids.remove(getSession(req));
                 GridCore.emptyGrid(getConnection(req));
                 return "";
             });
 
         // met à jour la grille en la remplaçant par la génération suivante
         post("/grid/next", (req, res) -> {
-                GridCore.goNext(getConnection(req));
+            long started = System.nanoTime();
+            int session = getSession(req);
+            Connection c = getConnection(req);
+            List<CellEntity> simulationGrid = simulationGrids.get(session);
+            if (simulationGrid == null) {
+                simulationGrid = GridCore.getGrid(c);
+            }
+            simulationGrids.put(session, GridCore.nextGeneration(simulationGrid));
+            long elapsed = (System.nanoTime() - started) / 1_000_000;
+            System.out.println("[perf] /grid/next: " + elapsed + " ms");
                 return "";
             });
 
